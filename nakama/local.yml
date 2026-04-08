@@ -12,7 +12,8 @@
 
 # A human-readable name for this server instance, surfaced in the Nakama
 # Console. Useful when running multiple instances behind a load balancer.
-name: lila-tictactoe-nakama
+# Nakama enforces a 1-16 character limit, so we use a short alias.
+name: lila-nakama
 
 # Working directory for runtime modules and data files. Inside the container
 # we bind-mount our `nakama/data` host directory to this path.
