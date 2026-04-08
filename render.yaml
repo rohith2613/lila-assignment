@@ -1,0 +1,69 @@
+# =============================================================================
+# Render Blueprint — provisions both the Nakama backend and its PostgreSQL
+# database in one declarative file.
+#
+# How to use:
+#   1. Sign in to https://dashboard.render.com with the GitHub account that
+#      owns this repo.
+#   2. Click "New" -> "Blueprint".
+#   3. Select rohith2613/lila-assignment.
+#   4. Render reads this file and shows the two services it will create.
+#   5. Click "Apply" -> wait ~3 minutes for the first deploy.
+#   6. The Nakama service gets a public URL like
+#      https://lila-nakama.onrender.com — that's what the frontend talks to.
+#
+# Free-tier notes:
+#   - The web service spins down after ~15 min of inactivity. First request
+#     after a cold start takes ~30 s. Acceptable for an assignment demo.
+#   - The free Postgres instance is automatically deleted after 90 days. For
+#     anything longer-lived, upgrade to Starter ($7/mo) or move to a paid
+#     provider.
+# =============================================================================
+
+databases:
+  - name: lila-postgres
+    # `basic-256mb` is the smallest plan; `free` works too but expires.
+    # Switch to `free` if you don't have a Render paid plan attached.
+    plan: free
+    databaseName: nakama
+    user: nakama
+
+services:
+  - type: web
+    name: lila-nakama
+    runtime: docker
+    plan: free
+    region: oregon
+    # Build context = nakama/ directory inside the repo. Render reads the
+    # Dockerfile at that path and builds it.
+    rootDir: nakama
+    dockerfilePath: ./Dockerfile
+    # The container's PORT env var is auto-injected by Render. Our
+    # entrypoint.sh respects it and passes it to nakama via --socket.port.
+    # We expose 7350 as the documented default but Render overrides it.
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      # Database — Render auto-fills this from the lila-postgres service.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lila-postgres
+          property: connectionString
+
+      # Nakama runtime config. Most of these can be overridden in the Render
+      # dashboard later for production hardening.
+      - key: NAKAMA_HTTP_KEY
+        generateValue: true
+      - key: NAKAMA_SOCKET_SERVER_KEY
+        # MUST match the client's VITE_NAKAMA_SERVER_KEY. We pin a known value
+        # here so the frontend env vars line up. Override later if you want
+        # to rotate.
+        value: defaultkey
+      - key: NAKAMA_SESSION_KEY
+        generateValue: true
+      - key: NAKAMA_REFRESH_KEY
+        generateValue: true
+      - key: NAKAMA_CONSOLE_USERNAME
+        value: admin
+      - key: NAKAMA_CONSOLE_PASSWORD
+        generateValue: true

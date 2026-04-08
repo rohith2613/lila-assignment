@@ -1,0 +1,9 @@
+# Force LF line endings on shell scripts. Without this, Windows git would
+# convert entrypoint.sh to CRLF on commit, and the alpine container would
+# fail to execute it because the kernel reads `#!/bin/sh\r` as the shebang.
+*.sh text eol=lf
+
+# Same for any other files that must run inside Linux containers.
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

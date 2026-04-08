@@ -397,11 +397,46 @@ The client calls them via `client.rpc(session, "<name>", payload)`.
 
 ## Deployment
 
-See [`DEPLOYMENT.md`](DEPLOYMENT.md) for a step-by-step guide covering:
+There are two supported paths:
+
+### Easy mode (no credit card): Render + Vercel
+
+A [`render.yaml`](render.yaml) blueprint at the repo root provisions both
+the Nakama backend and a free PostgreSQL database in one shot:
+
+1. Sign in to <https://dashboard.render.com> with the GitHub account that
+   owns this repo.
+2. Click **New** → **Blueprint** → select the repo.
+3. Render reads `render.yaml`, shows the two services (`lila-nakama` and
+   `lila-postgres`), and asks you to confirm. Click **Apply**.
+4. Wait ~3 minutes for the first build. You'll get a public URL like
+   `https://lila-nakama.onrender.com`.
+
+For the frontend:
+
+1. Sign in to <https://vercel.com> with the same GitHub account.
+2. **New Project** → import the repo → **Root Directory: `frontend`**.
+3. Vercel auto-detects Vite. Add four environment variables:
+   - `VITE_NAKAMA_HOST` = `lila-nakama.onrender.com` (no scheme, no port)
+   - `VITE_NAKAMA_PORT` = `443`
+   - `VITE_NAKAMA_USE_SSL` = `true`
+   - `VITE_NAKAMA_SERVER_KEY` = `defaultkey` (matches `NAKAMA_SOCKET_SERVER_KEY`
+     in `render.yaml`; rotate both together if you want a different value)
+4. Click **Deploy**.
+
+> **Free-tier caveats:** Render's free web service spins down after ~15 min
+> of inactivity (first request after a cold start takes ~30 s) and the free
+> Postgres is auto-deleted after 90 days. Both are fine for an assignment
+> demo. Upgrade to Render Starter ($7/mo) or move to a VPS for anything
+> longer-lived.
+
+### Real production mode (Linux VM)
+
+[`DEPLOYMENT.md`](DEPLOYMENT.md) has the full step-by-step guide for:
 
 - Deploying Nakama + Postgres to a DigitalOcean droplet (or any Linux VM)
 - Putting a TLS-terminating Caddy proxy in front of port 7350
-- Deploying the React frontend to Vercel (or Netlify, GitHub Pages, etc.)
+- Deploying the React frontend to Vercel
 - Wiring the frontend's `VITE_NAKAMA_*` vars to the public Nakama host
 
 ---

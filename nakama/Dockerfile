@@ -47,7 +47,18 @@ FROM heroiclabs/nakama:3.22.0
 COPY --from=builder /build/data/modules /nakama/data/modules
 COPY local.yml /nakama/data/local.yml
 
-# The image already has Nakama as ENTRYPOINT. We override CMD to include
-# our config file path. The migrate step is run separately by docker-compose
-# (see depends_on / command in docker-compose.yml).
-CMD ["/nakama/nakama", "--config", "/nakama/data/local.yml"]
+# Copy the entrypoint script that handles `migrate up` then starts Nakama
+# using whichever DATABASE_URL was injected by the host (Render, Railway,
+# Fly.io, etc.). Same script also works locally with docker-compose if you
+# pass DATABASE_URL — though docker-compose still has its own entrypoint
+# override that runs migrate explicitly. Belt and suspenders.
+COPY entrypoint.sh /nakama/entrypoint.sh
+# Nakama base image is alpine-based; chmod is needed because COPY doesn't
+# preserve the executable bit on Windows hosts.
+USER root
+RUN chmod +x /nakama/entrypoint.sh
+USER root
+
+# The Nakama base image sets ENTRYPOINT to the nakama binary; override it so
+# our shell script runs instead. The script then execs nakama as PID 1.
+ENTRYPOINT ["/nakama/entrypoint.sh"]
