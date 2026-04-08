@@ -544,8 +544,41 @@ var matchJoinAttempt = function (ctx, logger, nk, dispatcher, tick, state, prese
 /**
  * matchJoin — called after matchJoinAttempt accepts. Now the player is
  * actually IN the match presence list and we can set up their game state.
+ *
+ * For each new player we look up their CURRENT username via `nk.usersGetId`
+ * instead of trusting `presence.username`. The presence value reflects the
+ * username at the time the WebSocket session was authenticated; if the
+ * client called `updateAccount` to change their nickname AFTER auth (which
+ * our flow does, to handle username conflicts), the presence cache is stale
+ * but the user account record is fresh.
  */
 var matchJoin = function (ctx, logger, nk, dispatcher, tick, state, presences) {
+    // Resolve all the new joiners' user accounts in one batched call.
+    var newJoinIds = [];
+    for (var i = 0; i < presences.length; i++) {
+        if (!state.players[presences[i].userId]) {
+            newJoinIds.push(presences[i].userId);
+        }
+    }
+    var usernameById = {};
+    if (newJoinIds.length > 0) {
+        try {
+            var users = nk.usersGetId(newJoinIds);
+            if (users) {
+                for (var i = 0; i < users.length; i++) {
+                    var u = users[i];
+                    if (u && u.userId) {
+                        // Prefer display_name if set (the human-readable nickname), then
+                        // username (the unique handle), then a placeholder.
+                        usernameById[u.userId] = u.displayName || u.username || "anonymous";
+                    }
+                }
+            }
+        }
+        catch (err) {
+            logger.warn("usersGetId failed during matchJoin: %s", String(err));
+        }
+    }
     for (var i = 0; i < presences.length; i++) {
         var p = presences[i];
         if (state.players[p.userId]) {
@@ -556,14 +589,15 @@ var matchJoin = function (ctx, logger, nk, dispatcher, tick, state, presences) {
         }
         // Assign mark by join order: first player is X, second is O.
         var mark = state.playerOrder.length === 0 ? "X" : "O";
+        var resolvedName = usernameById[p.userId] || p.username || "anonymous";
         state.players[p.userId] = {
             userId: p.userId,
-            username: p.username,
+            username: resolvedName,
             mark: mark,
             connected: true,
         };
         state.playerOrder.push(p.userId);
-        logger.info("Player %s (%s) joined as %s", p.username, p.userId, mark);
+        logger.info("Player %s (%s) joined as %s", resolvedName, p.userId, mark);
     }
     // If we now have 2 players, transition to playing.
     if (state.phase === "waiting" && state.playerOrder.length === 2) {

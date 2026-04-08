@@ -185,13 +185,28 @@ lila-nakama   | {"level":"info","msg":"Startup done"}
 
 ```bash
 cd frontend
-cp .env.example .env       # the defaults already point at localhost:7350
 npm install
 npm run dev                # starts Vite on http://localhost:5173
 ```
 
 Open <http://localhost:5173> in two browsers (or one normal + one
 incognito) to play against yourself.
+
+In **dev mode**, the Vite dev server proxies `/v2/*` (Nakama HTTP API) and
+`/ws` (Nakama WebSocket) to `http://127.0.0.1:7350` so the browser sees the
+SDK as same-origin. This sidesteps CORS without requiring a reverse proxy
+locally. The proxy target is configurable via `VITE_NAKAMA_PROXY_TARGET`
+in a `.env.local` file — useful when Nakama is running on a different
+host/IP (e.g. inside WSL):
+
+```ini
+# frontend/.env.local
+VITE_NAKAMA_PROXY_TARGET=http://172.24.189.200:7350
+```
+
+For **production builds**, the proxy is irrelevant — set the public
+Nakama host directly via `VITE_NAKAMA_HOST` / `VITE_NAKAMA_PORT` /
+`VITE_NAKAMA_USE_SSL` (see [`frontend/.env.example`](frontend/.env.example)).
 
 ---
 
@@ -403,9 +418,11 @@ These are intentional cuts to keep the assignment focused:
 - **No private rooms in the UI.** The `create_private_match` RPC exists on
   the server but no UI calls it. Adding a "play with a friend" screen would
   be ~50 lines.
-- **No tests yet.** The pure functions in `game_logic.ts` are designed to be
-  trivially unit-testable; I'd add a Vitest suite as the very first thing in
-  a follow-up.
+- **Tests are minimal.** A plain-Node smoke test for the pure game logic
+  lives at [`nakama/test/game_logic.test.mjs`](nakama/test/game_logic.test.mjs)
+  and can be run with `node nakama/test/game_logic.test.mjs` (15 tests
+  covering board win detection, move validation, and a full-game simulation).
+  A real Vitest suite for the React components would be the next step.
 - **No CI pipeline.** A small GitHub Actions workflow that runs `npm run
   build` in both packages would catch regressions on every PR.
 

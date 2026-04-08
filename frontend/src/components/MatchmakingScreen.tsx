@@ -56,25 +56,31 @@ export default function MatchmakingScreen({
   }, []);
 
   // ---- Kick off matchmaking on mount ------------------------------------
+  //
+  // Important: we deliberately do NOT use a `cancelled` flag with an effect
+  // cleanup. React StrictMode mounts -> unmounts -> re-mounts every effect
+  // in dev, which would set `cancelled=true` mid-flight and skip the
+  // `joinMatch` call we depend on. The `startedRef` guard makes the body
+  // run at most once across both StrictMode passes; the async work that
+  // it kicks off keeps going regardless of remounts. Callbacks update
+  // parent state via setState, which is safe even if this component is
+  // technically unmounted at the moment a callback fires (the parent App
+  // owns the connection and the screen state).
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
 
-    let cancelled = false;
-
     (async () => {
       try {
         const matchId = await findOrCreateMatch(conn, mode);
-        if (cancelled) return;
 
-        // Capture a flag-in-closure: the first STATE_UPDATE after join is
-        // the "initial" state we hand to the App. Subsequent updates use
-        // the regular onState callback.
+        // The first STATE_UPDATE after join is the "initial" state we hand
+        // to the App via onJoined. Subsequent updates use the regular
+        // onState callback.
         let receivedFirstState = false;
 
         await joinMatch(conn, matchId, {
           onState: (state) => {
-            if (cancelled) return;
             if (!receivedFirstState) {
               receivedFirstState = true;
               setJoined(true);
@@ -83,30 +89,24 @@ export default function MatchmakingScreen({
               onState(state);
             }
           },
-          onError: (msg) => {
-            if (!cancelled) onError(msg);
-          },
-          onDisconnect: () => {
-            if (!cancelled) onError("Disconnected from server");
-          },
+          onError: (msg) => onError(msg),
+          onDisconnect: () => onError("Disconnected from server"),
         });
       } catch (err) {
         console.error("[matchmaking] failed:", err);
-        if (!cancelled) {
-          onError(
-            "Couldn't find a match. The server may be busy — please try again.",
-          );
-        }
+        onError(
+          "Couldn't find a match. The server may be busy — please try again.",
+        );
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
-    // We intentionally do NOT include onJoined / onState / onError in deps —
-    // they're defined as useCallback in the parent, but redefining them on
-    // every parent render would re-trigger this effect and re-join the match.
-    // The startedRef guard makes this safe regardless.
+    // No cleanup function — see comment block above. Cancellation of the
+    // in-flight async work is the parent App's responsibility (via
+    // handleLeaveMatch which calls leaveMatch on the connection).
+    //
+    // We intentionally do NOT include onJoined / onState / onError in deps
+    // either: they're useCallback'd in the parent and the startedRef guard
+    // already prevents re-entry on dependency changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conn, mode]);
 

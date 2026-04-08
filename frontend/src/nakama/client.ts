@@ -21,11 +21,24 @@ import { GameState, LeaderboardEntry, MatchMode, OpCode } from "./types";
 
 // -- Environment-driven config -----------------------------------------------
 //
-// Vite exposes any `VITE_*` env var on `import.meta.env`. We default to local
-// dev values so a `npm run dev` works out of the box without an .env file.
+// Vite exposes any `VITE_*` env var on `import.meta.env`. The defaults are:
+//
+//   - dev:  same-origin as the page (so the Vite dev server can proxy
+//           /v2 and /ws to Nakama and CORS becomes a non-issue).
+//   - prod: 127.0.0.1:7350 — placeholder; production deployments MUST set
+//           VITE_NAKAMA_HOST / VITE_NAKAMA_PORT explicitly via .env.production
+//           or the build host's environment.
+//
+// The dev-mode same-origin default assumes vite.config.ts has the matching
+// `proxy` block for /v2 and /ws.
 
-const HOST = (import.meta.env.VITE_NAKAMA_HOST as string) || "127.0.0.1";
-const PORT = (import.meta.env.VITE_NAKAMA_PORT as string) || "7350";
+const isDev = import.meta.env.DEV;
+const HOST =
+  (import.meta.env.VITE_NAKAMA_HOST as string) ||
+  (isDev ? window.location.hostname : "127.0.0.1");
+const PORT =
+  (import.meta.env.VITE_NAKAMA_PORT as string) ||
+  (isDev ? window.location.port || "5173" : "7350");
 const USE_SSL = (import.meta.env.VITE_NAKAMA_USE_SSL as string) === "true";
 const SERVER_KEY =
   (import.meta.env.VITE_NAKAMA_SERVER_KEY as string) || "defaultkey";
@@ -116,20 +129,47 @@ export async function createNakamaClient(nickname: string): Promise<NakamaConnec
   const client = new Client(SERVER_KEY, HOST, PORT, USE_SSL);
 
   // Device auth: stable id, create=true means create the account if it
-  // doesn't exist yet. We pass the nickname as the username so it shows up
-  // on the leaderboard immediately. `vars` is empty — not used.
+  // doesn't exist yet.
+  //
+  // We deliberately do NOT pass the nickname as the third argument here.
+  // Passing it would make Nakama try to set it as the unique username at
+  // account-creation time — which fails with 409 if another device already
+  // has that username (and a freshly cleared localStorage in dev would
+  // collide with whatever's already in the database).
+  //
+  // Instead we let Nakama auto-generate a random username, then immediately
+  // try to overwrite it via updateAccount. If THAT collides we tack on a
+  // 4-digit suffix and try once more. If that also collides we keep the
+  // random one — the user can still play, they just won't see their picked
+  // name on the leaderboard (extremely rare edge case).
   const deviceId = getOrCreateDeviceId();
-  const session = await client.authenticateDevice(deviceId, true, nickname);
+  const session = await client.authenticateDevice(deviceId, true);
 
-  // If this is a returning user we still want their username updated to the
-  // current nickname (in case they changed it). Nakama doesn't let you set
-  // the username during a re-auth, so we update it via the account API.
+  let resolvedUsername = nickname;
   try {
-    await client.updateAccount(session, { username: nickname, display_name: nickname });
+    await client.updateAccount(session, {
+      username: nickname,
+      display_name: nickname,
+    });
   } catch (err) {
-    // Username collisions can throw. We log and continue — the existing
-    // username will still work, it just won't reflect the new nickname.
-    console.warn("[nakama] failed to update account username:", err);
+    // Most likely a 409 username conflict. Retry once with a random suffix.
+    const suffix = Math.floor(Math.random() * 9000) + 1000; // 1000–9999
+    const fallback = `${nickname}${suffix}`;
+    try {
+      await client.updateAccount(session, {
+        username: fallback,
+        display_name: nickname,
+      });
+      resolvedUsername = fallback;
+      console.warn(
+        `[nakama] username "${nickname}" was taken; using "${fallback}" instead`,
+      );
+    } catch (err2) {
+      console.warn(
+        "[nakama] failed to update account username (giving up):",
+        err2,
+      );
+    }
   }
 
   // Open the socket. The second arg is `appearOnline` (true so other players
@@ -138,9 +178,10 @@ export async function createNakamaClient(nickname: string): Promise<NakamaConnec
   const socket = client.createSocket(USE_SSL, false);
   await socket.connect(session, true);
 
-  // Pull the username back out of the session — Nakama may have munged it
-  // (e.g. trimmed whitespace) so we use the canonical value.
-  const username = (session.username as string) || nickname;
+  // Use the username we resolved above (post-updateAccount). The session
+  // object's username field is the OLD random one Nakama generated at create
+  // time and isn't refreshed by updateAccount.
+  const username = resolvedUsername;
   const userId = session.user_id as string;
 
   return { client, session, socket, userId, username };
@@ -154,9 +195,8 @@ export async function findOrCreateMatch(
   mode: MatchMode,
 ): Promise<string> {
   const rpcResult = await conn.client.rpc(conn.session, "find_match", { mode });
-  // RPC payload is JSON. The Nakama SDK returns it pre-parsed in `payload`.
-  const payload = (rpcResult.payload || {}) as { matchId?: string };
-  if (!payload.matchId) {
+  const payload = parseRpcPayload(rpcResult.payload) as { matchId?: string };
+  if (!payload || !payload.matchId) {
     throw new Error("find_match RPC did not return a matchId");
   }
   return payload.matchId;
@@ -252,8 +292,30 @@ export async function getLeaderboard(
   limit = 10,
 ): Promise<LeaderboardEntry[]> {
   const result = await conn.client.rpc(conn.session, "get_leaderboard", { limit });
-  const payload = (result.payload || {}) as { entries?: LeaderboardEntry[] };
-  return payload.entries || [];
+  const payload = parseRpcPayload(result.payload) as { entries?: LeaderboardEntry[] };
+  return payload?.entries || [];
+}
+
+/**
+ * The Nakama JS SDK leaves the rpc response `payload` as the raw string the
+ * server returned (which in our case is always JSON). This helper parses it
+ * defensively — if some future SDK version starts auto-parsing, the typeof
+ * check still does the right thing.
+ */
+function parseRpcPayload(payload: unknown): Record<string, unknown> | null {
+  if (payload == null) return null;
+  if (typeof payload === "string") {
+    try {
+      return JSON.parse(payload);
+    } catch (err) {
+      console.error("[nakama] failed to parse rpc payload:", err, payload);
+      return null;
+    }
+  }
+  if (typeof payload === "object") {
+    return payload as Record<string, unknown>;
+  }
+  return null;
 }
 
 // -- Private helpers ---------------------------------------------------------
