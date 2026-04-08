@@ -1,0 +1,78 @@
+/* ---------------------------------------------------------------------------
+   Global stylesheet — pulls in Tailwind's three layers and adds a small set
+   of base resets / utility classes that are easier to express in raw CSS.
+   --------------------------------------------------------------------------- */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Use the full viewport on mobile and respect the safe-area inset on
+     notched devices (iPhone, etc.). The min-h-svh utility helps but adding
+     env(safe-area-inset-bottom) padding ensures buttons aren't covered by
+     the home indicator. */
+  html,
+  body,
+  #root {
+    @apply h-full min-h-svh w-full;
+  }
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: env(safe-area-inset-top);
+    /* Prevent the iOS rubber-band scroll on the matchmaking screen. The
+       game itself never overflows the viewport so this is safe. */
+    overscroll-behavior-y: none;
+  }
+  /* Disable iOS tap highlight — looks ugly on dark backgrounds. */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  /* Primary CTA button used on the nickname / mode screens. Tailwind's
+     @apply lets us keep the JSX clean while documenting the look here. */
+  .btn-primary {
+    @apply inline-flex items-center justify-center
+           rounded-xl bg-lila-accent px-6 py-3
+           text-base font-semibold text-black
+           shadow-glow transition
+           hover:bg-lila-accentHover active:scale-[0.98]
+           disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center
+           rounded-xl border border-lila-border bg-lila-surface
+           px-5 py-3 text-sm font-medium text-lila-text
+           transition hover:border-lila-accent hover:text-lila-accent;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-lila-border bg-lila-surface
+           px-4 py-3 text-base text-lila-text placeholder:text-lila-subtle
+           focus:border-lila-accent focus:outline-none focus:ring-2
+           focus:ring-lila-accent/30;
+  }
+
+  /* Keyframe slot for the X / O ink-in animation. Defined here because
+     Tailwind plays nicer with named animations declared once. */
+  .mark-ink-in {
+    animation: ink-in 220ms ease-out both;
+  }
+  @keyframes ink-in {
+    0% {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    60% {
+      transform: scale(1.05);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+}

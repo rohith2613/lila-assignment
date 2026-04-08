@@ -1,0 +1,95 @@
+# =============================================================================
+# docker-compose.yml — local development + single-host production deployment
+# for the LILA Tic-Tac-Toe game.
+#
+# Services:
+#   - postgres:    Nakama's required relational store (16-alpine).
+#   - nakama:      The Nakama server with our TypeScript runtime modules
+#                  baked in via the multi-stage Dockerfile.
+#
+# Local dev:
+#   1. Build the TS modules:   (cd nakama && npm install && npm run build)
+#   2. Bring up the stack:     docker compose up --build
+#   3. Open Nakama Console:    http://localhost:7351
+#   4. Point the frontend at:  http://localhost:7350
+#
+# Production:
+#   The same compose file works on a small VM (DigitalOcean droplet, EC2,
+#   Hetzner, etc.) — bring it up the same way and put a TLS-terminating
+#   reverse proxy (Caddy/nginx) in front of port 7350. See DEPLOYMENT.md.
+# =============================================================================
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: lila-postgres
+    restart: unless-stopped
+    environment:
+      # IMPORTANT: change POSTGRES_PASSWORD in any deployment that's reachable
+      # from outside localhost. The default here is intentionally weak so a
+      # forgotten dev DB doesn't get pushed to a public host with a "real"
+      # password baked in.
+      POSTGRES_DB: nakama
+      POSTGRES_USER: nakama
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+    # Persist the database to a named volume so data survives container
+    # rebuilds during development.
+    volumes:
+      - lila_postgres_data:/var/lib/postgresql/data
+    # We don't expose the Postgres port to the host by default — only Nakama
+    # talks to it across the docker network. Uncomment the `ports:` block
+    # below if you need to connect with psql / a SQL client.
+    # ports:
+    #   - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nakama -d nakama"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nakama:
+    build:
+      context: ./nakama
+      dockerfile: Dockerfile
+    container_name: lila-nakama
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # We override the entrypoint so we can run `migrate up` (idempotent
+    # database schema migration) BEFORE starting the actual server. The
+    # second command keeps the container alive serving Nakama on the
+    # configured ports.
+    entrypoint:
+      - "/bin/sh"
+      - "-ecx"
+      - >
+        /nakama/nakama migrate up
+        --database.address nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama &&
+        exec /nakama/nakama
+        --config /nakama/data/local.yml
+        --database.address nakama:${POSTGRES_PASSWORD:-localdev}@postgres:5432/nakama
+    ports:
+      # 7349: gRPC API (server-to-server)
+      - "7349:7349"
+      # 7350: HTTP/REST + WebSocket (client-facing)
+      - "7350:7350"
+      # 7351: Nakama Console (admin UI). DO NOT expose to the public Internet
+      # in production — bind to 127.0.0.1 or use an SSH tunnel.
+      - "7351:7351"
+    # Mount the data directory so the JS bundle and config can be hot-swapped
+    # in development without a full image rebuild. In CI/production builds
+    # the bundle is also baked into the image (see Dockerfile) so this is
+    # purely an optimization for the dev loop.
+    volumes:
+      - ./nakama/data:/nakama/data
+    healthcheck:
+      test: ["CMD", "/nakama/nakama", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  lila_postgres_data:
+    driver: local

@@ -1,0 +1,20 @@
+{
+  "name": "lila-tictactoe-nakama-modules",
+  "version": "1.0.0",
+  "description": "Server-authoritative Tic-Tac-Toe match handler, matchmaking and leaderboard for the Lila assignment, written in TypeScript and bundled into a single JS file consumable by Nakama's JavaScript runtime.",
+  "private": true,
+  "main": "./build/index.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && rollup -c && node ./scripts/copy-bundle.mjs",
+    "clean": "rimraf build data/modules/index.js"
+  },
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^11.1.6",
+    "nakama-runtime": "https://github.com/heroiclabs/nakama-common.git#v1.32.0",
+    "rimraf": "^5.0.5",
+    "rollup": "^4.13.0",
+    "tslib": "^2.6.2",
+    "typescript": "^5.4.5"
+  }
+}

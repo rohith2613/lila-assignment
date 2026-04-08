@@ -1,0 +1,55 @@
+# ============================================================================
+# Root .gitignore for the Lila Tic-Tac-Toe full-stack project.
+# Covers Node, TypeScript, Vite, Nakama runtime artifacts, IDE files, OS files.
+# ============================================================================
+
+# --- Node / npm / pnpm / yarn -----------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# --- Build outputs ----------------------------------------------------------
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Compiled Nakama JS bundle is generated from TypeScript and committed to
+# nakama/data/modules so the Nakama container can pick it up at startup.
+# We do NOT ignore that file — it must be present in the image build context.
+
+# --- Environment / secrets --------------------------------------------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# --- Vite / React frontend --------------------------------------------------
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# --- Nakama / Postgres data volumes (when running locally with bind mounts) -
+nakama/data/postgres/
+nakama/data/nakama-data/
+
+# --- IDE / editor -----------------------------------------------------------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+*.swp
+*.swo
+
+# --- OS junk ----------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs -------------------------------------------------------------------
+logs/
+*.log

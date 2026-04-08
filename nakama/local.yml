@@ -1,0 +1,85 @@
+# =============================================================================
+# Nakama server configuration for the LILA Tic-Tac-Toe project.
+#
+# This file is consumed by Nakama on startup via the `--config` CLI flag (see
+# docker-compose.yml). All values can also be set via env vars or CLI flags;
+# YAML is preferred here because it documents the full set of overrides in
+# one place.
+#
+# Defaults that match the Nakama documentation are kept short. Anything we
+# customize is commented inline so a reviewer knows WHY we changed it.
+# =============================================================================
+
+# A human-readable name for this server instance, surfaced in the Nakama
+# Console. Useful when running multiple instances behind a load balancer.
+name: lila-tictactoe-nakama
+
+# Working directory for runtime modules and data files. Inside the container
+# we bind-mount our `nakama/data` host directory to this path.
+data_dir: "./data"
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logger:
+  # `info` is verbose enough to debug game logic without flooding the console.
+  # Bump to `debug` if you need to trace individual ticks.
+  level: "INFO"
+  # `json` makes log shipping (Datadog, Loki, etc.) easier in production.
+  # Use `console` locally for human-readable color output.
+  format: "json"
+
+# -----------------------------------------------------------------------------
+# Runtime — JavaScript modules
+# -----------------------------------------------------------------------------
+runtime:
+  # Path inside data_dir where Nakama will look for compiled JS modules. Our
+  # rollup build copies the bundle to nakama/data/modules/index.js.
+  path: "./data/modules"
+  # The single entry-point JS file. Nakama loads this and looks for the
+  # top-level `InitModule` function.
+  js_entrypoint: "index.js"
+  # HTTP server key — clients use this to authenticate RPC and runtime calls.
+  # Override via env var NAKAMA_RUNTIME_HTTP_KEY in production.
+  http_key: "lila_default_http_key_change_me"
+
+# -----------------------------------------------------------------------------
+# Session
+# -----------------------------------------------------------------------------
+session:
+  # Server key clients send to authenticate. The Nakama JS client takes this
+  # as `serverKey` in the constructor. Override in production.
+  encryption_key: "lila_default_session_key_change_me_to_a_long_random_string"
+  token_expiry_sec: 7200      # access tokens expire after 2 hours
+  refresh_encryption_key: "lila_default_refresh_key_change_me_to_a_long_random_string"
+  refresh_token_expiry_sec: 604800  # refresh tokens expire after 7 days
+
+# -----------------------------------------------------------------------------
+# Socket / matchmaker / metrics
+# -----------------------------------------------------------------------------
+socket:
+  server_key: "defaultkey"      # IMPORTANT: change in prod, mirror in client
+  max_message_size_bytes: 4096  # plenty for our small JSON state payloads
+  read_buffer_size_bytes: 4096
+  write_buffer_size_bytes: 4096
+  # Idle connections are closed after this many seconds of inactivity. Long
+  # enough to survive client tab-switches but short enough to free sockets.
+  pong_wait_ms: 25000
+  ping_period_ms: 15000
+
+# Nakama exposes Prometheus metrics on the metrics_port if enabled. We enable
+# them so monitoring is straightforward in any cloud provider.
+metrics:
+  reporting_freq_sec: 60
+  prometheus_port: 9100
+
+# -----------------------------------------------------------------------------
+# Console (admin UI)
+# -----------------------------------------------------------------------------
+console:
+  # IMPORTANT: change these in production. The console gives full access to
+  # the database and runtime — never expose it publicly with default creds.
+  username: "admin"
+  password: "lila_admin_change_me"
+  # Console listens on a separate port from the API for easy network ACLs.
+  port: 7351

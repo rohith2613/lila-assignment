@@ -1,0 +1,42 @@
+{
+  // ---------------------------------------------------------------------------
+  // TypeScript configuration for the Nakama server-side modules.
+  //
+  // Nakama's JavaScript runtime is powered by Goja (a Go-based ES5.1+ engine).
+  // It does NOT support modern Node APIs, async/await, or ES modules — so we
+  // target ES5 and emit a single bundled file via rollup. The compiler is run
+  // only in --noEmit mode for type-checking; rollup handles the actual emit.
+  //
+  // The `types` array pulls in the global `nkruntime` namespace from the
+  // nakama-runtime package (heroic labs's nakama-common GitHub repo), so we
+  // can write `nkruntime.MatchHandler<T>` etc. without explicit imports.
+  // ---------------------------------------------------------------------------
+  "compilerOptions": {
+    "target": "es5",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "removeComments": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "build",
+    "rootDir": "src",
+    "typeRoots": [
+      "./node_modules"
+    ],
+    "types": [
+      "nakama-runtime"
+    ]
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "build"
+  ]
+}
