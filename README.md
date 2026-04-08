@@ -1,5 +1,17 @@
 # LILA Tic-Tac-Toe — Full-Stack Multiplayer Assignment
 
+> 🎮 **Live demo:** <https://lila-assignment-rohith-sriramulas-projects.vercel.app>
+>
+> 🛰️ **Live Nakama backend:** <https://lila-nakama-gmq9.onrender.com>
+>
+> Open the demo in **two browser windows** (one normal + one incognito so they
+> get distinct device IDs) and play against yourself.
+>
+> ⚠️ The Render free tier spins the backend down after ~15 min of inactivity.
+> First request after a cold start takes ~30 seconds to wake the container —
+> if the nickname screen says "Couldn't reach the game server", just wait a
+> few seconds and click Continue again.
+
 A production-ready, server-authoritative multiplayer Tic-Tac-Toe game built
 for the [LILA Games](https://linktr.ee/lilagames) backend assignment.
 
